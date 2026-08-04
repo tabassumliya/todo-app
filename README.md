@@ -31,6 +31,16 @@
   <img src="https://img.shields.io/badge/Lines_of_Code-190+-purple?style=for-the-badge&logo=code&logoColor=white" alt="Lines of Code">
 </p>
 
+## 🚀 Live Demo
+
+Try the app right now — no installation needed:
+
+<p align="center">
+  <a href="https://tabassumliya.github.io/todo-app/">
+    <img src="https://img.shields.io/badge/🚀_Open_Live_Demo-28a745?style=for-the-badge&logo=githubpages&logoColor=white" alt="Live Demo">
+  </a>
+</p>
+
 ## Features in Detail
 
 ### Task Management
