@@ -79,13 +79,23 @@ function getDropIndex(clientY) {
   const reduced = Array.from(list.querySelectorAll("li")).filter(
     (li) => li !== dragState.li
   );
-  for (let i = 0; i < reduced.length; i++) {
-    const rect = reduced[i].getBoundingClientRect();
+  let index = 0;
+  while (index < reduced.length) {
+    const rect = reduced[index].getBoundingClientRect();
     if (clientY < rect.top + rect.height / 2) {
-      return i;
+      break;
     }
+    index++;
   }
-  return reduced.length;
+
+  // with auto-sort on, completed rows are pinned to the bottom, so the
+  // drop slot can never go past the last active row
+  if (autoSort) {
+    const activeCount = reduced.filter((li) => !li.classList.contains("done")).length;
+    index = Math.min(index, activeCount);
+  }
+
+  return index;
 }
 
 // Slide the blue line to the boundary at the given slot.
