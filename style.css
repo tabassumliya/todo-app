@@ -108,21 +108,14 @@ h1 {
 }
 
 #task-list li.dragging {
-  opacity: 0.4;
+  opacity: 0.6;
+  background: #f7f9fc;
+  border-radius: 6px;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.12);
 }
 
 body.dragging-task {
   user-select: none;
-}
-
-#drop-indicator {
-  display: none;
-  position: absolute;
-  left: 0;
-  right: 0;
-  height: 2px;
-  background: #4a90e2;
-  pointer-events: none;
 }
 
 #task-list li span {

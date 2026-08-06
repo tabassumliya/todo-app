@@ -18,12 +18,8 @@ function displayTasks() {
   return tasks.filter((t) => !t.done).concat(tasks.filter((t) => t.done));
 }
 
-// ---- Drag & drop (pointer events) --------------------------
-const indicator = document.createElement("div");
-indicator.id = "drop-indicator";
-
+// ---- Drag & drop (pointer events, live reorder) -------------
 let dragState = null;   // { taskId, li, startY, moved }
-let dropIndex = -1;
 
 function onHandleDown(event, taskId, li) {
   event.preventDefault();
@@ -41,17 +37,20 @@ function onHandleMove(event) {
     return;
   }
   const dy = event.clientY - dragState.startY;
-  if (!dragState.moved && Math.abs(dy) < 6) {
-    return;   // wait until the pointer actually travels a little
-  }
   if (!dragState.moved) {
+    if (Math.abs(dy) < 6) {
+      return;   // wait until the pointer actually travels a little
+    }
     dragState.moved = true;
     dragState.li.classList.add("dragging");
     document.body.classList.add("dragging-task");
-    indicator.style.display = "block";
   }
-  dropIndex = getDropIndex(event.clientY);
-  positionIndicator(dropIndex);
+
+  // the grabbed row follows the pointer vertically
+  dragState.li.style.transform = "translateY(" + dy + "px)";
+
+  // slide it past its neighbours while moving
+  shuffleIntoPlace();
 }
 
 function onHandleUp() {
@@ -59,84 +58,72 @@ function onHandleUp() {
     return;
   }
   if (dragState.moved) {
-    applyDrop(dragState.taskId, dropIndex);
-  }
-  endDrag();
-}
-
-function endDrag() {
-  if (dragState && dragState.li) {
+    dragState.li.style.transform = "";
     dragState.li.classList.remove("dragging");
-  }
-  document.body.classList.remove("dragging-task");
-  indicator.style.display = "none";
-  dragState = null;
-  dropIndex = -1;
-}
-
-// Which slot (0..n) does the pointer sit over? Dragged item excluded.
-function getDropIndex(clientY) {
-  const reduced = Array.from(list.querySelectorAll("li")).filter(
-    (li) => li !== dragState.li
-  );
-  let index = 0;
-  while (index < reduced.length) {
-    const rect = reduced[index].getBoundingClientRect();
-    if (clientY < rect.top + rect.height / 2) {
-      break;
-    }
-    index++;
-  }
-
-  // with auto-sort on, completed rows are pinned to the bottom, so the
-  // drop slot can never go past the last active row
-  if (autoSort) {
-    const activeCount = reduced.filter((li) => !li.classList.contains("done")).length;
-    index = Math.min(index, activeCount);
-  }
-
-  return index;
-}
-
-// Slide the blue line to the boundary at the given slot.
-function positionIndicator(index) {
-  const reduced = Array.from(list.querySelectorAll("li")).filter(
-    (li) => li !== dragState.li
-  );
-  const listRect = list.getBoundingClientRect();
-  let top;
-  if (reduced.length === 0) {
-    top = 0;
-  } else if (index <= 0) {
-    top = reduced[0].getBoundingClientRect().top - listRect.top;
-  } else if (index >= reduced.length) {
-    top = reduced[reduced.length - 1].getBoundingClientRect().bottom - listRect.top;
+    document.body.classList.remove("dragging-task");
+    saveTasks();
   } else {
-    top = reduced[index].getBoundingClientRect().top - listRect.top;
+    cancelDrag();
   }
-  indicator.style.top = top + "px";
+  dragState = null;
 }
 
-// Commit the new position into the array and persist it.
-function applyDrop(taskId, index) {
-  const from = tasks.findIndex((t) => t.id === taskId);
-  if (from < 0) {
+function cancelDrag() {
+  if (!dragState) {
     return;
   }
-  const [moved] = tasks.splice(from, 1);
+  dragState.li.style.transform = "";
+  dragState.li.classList.remove("dragging");
+  document.body.classList.remove("dragging-task");
+  dragState = null;
+}
 
+// Move the grabbed row so it sits around the row the pointer is over.
+function shuffleIntoPlace() {
+  const li = dragState.li;
+  const others = Array.from(list.querySelectorAll("li")).filter(
+    (row) => row !== li
+  );
+
+  // with auto-sort on, completed rows are pinned: only active rows compete
+  let candidates = others;
+  let clampRow = null;
   if (autoSort) {
-    const active = tasks.filter((t) => !t.done);
-    const done = tasks.filter((t) => t.done);
-    const insertAt = Math.min(Math.max(index, 0), active.length);
-    active.splice(insertAt, 0, moved);
-    tasks = active.concat(done);
-  } else {
-    tasks.splice(Math.min(Math.max(index, 0), tasks.length), 0, moved);
+    clampRow = others.find((row) => row.classList.contains("done")) || null;
+    candidates = others.filter((row) => !row.classList.contains("done"));
   }
 
-  saveTasks();
-  render();
+  const rect = li.getBoundingClientRect();
+  const mid = rect.top + rect.height / 2;
+
+  for (const row of candidates) {
+    const r = row.getBoundingClientRect();
+    if (mid < r.top + r.height / 2) {
+      if (li.nextElementSibling !== row) {
+        list.insertBefore(li, row);
+        syncOrderFromDom();
+      }
+      return;
+    }
+  }
+
+  // pointer sits below every candidate row
+  if (clampRow) {
+    if (li.nextElementSibling !== clampRow) {
+      list.insertBefore(li, clampRow);
+      syncOrderFromDom();
+    }
+  } else if (li.nextElementSibling) {
+    list.appendChild(li);
+    syncOrderFromDom();
+  }
+}
+
+// Keep the tasks array in sync with the current DOM order.
+function syncOrderFromDom() {
+  tasks = Array.from(list.querySelectorAll("li")).map(function (li) {
+    return tasks.find((t) => t.id === Number(li.dataset.id));
+  });
 }
 
 // ---- Render: draw every task from the array ---------------
@@ -184,7 +171,7 @@ function render() {
       });
       handle.addEventListener("pointermove", onHandleMove);
       handle.addEventListener("pointerup", onHandleUp);
-      handle.addEventListener("pointercancel", endDrag);
+      handle.addEventListener("pointercancel", cancelDrag);
     } else {
       handle.classList.add("pinned");
     }
@@ -197,7 +184,6 @@ function render() {
     list.appendChild(li);
   }
 
-  list.appendChild(indicator);
   updateCounter();
 }
 
