@@ -18,60 +18,113 @@ function displayTasks() {
   return tasks.filter((t) => !t.done).concat(tasks.filter((t) => t.done));
 }
 
-// ---- Drag & drop bookkeeping ------------------------------
-let draggingId = null;
+// ---- Drag & drop (pointer events) --------------------------
+const indicator = document.createElement("div");
+indicator.id = "drop-indicator";
 
-function onDragStart(event) {
-  draggingId = Number(event.currentTarget.dataset.id);
-  event.dataTransfer.effectAllowed = "move";
-  event.dataTransfer.setData("text/plain", String(draggingId));
-  event.currentTarget.classList.add("dragging");
-}
+let dragState = null;   // { taskId, li, startY, moved }
+let dropIndex = -1;
 
-function onDragEnd(event) {
-  draggingId = null;
-  event.currentTarget.classList.remove("dragging");
-}
-
-function onDragOver(event) {
+function onHandleDown(event, taskId, li) {
   event.preventDefault();
-  event.dataTransfer.dropEffect = "move";
-  const li = event.currentTarget;
-  const rect = li.getBoundingClientRect();
-  const before = event.clientY < rect.top + rect.height / 2;
-  li.classList.toggle("drop-before", before);
-  li.classList.toggle("drop-after", !before);
+  dragState = {
+    taskId: taskId,
+    li: li,
+    startY: event.clientY,
+    moved: false,
+  };
+  event.currentTarget.setPointerCapture(event.pointerId);
 }
 
-function onDragLeave(event) {
-  event.currentTarget.classList.remove("drop-before", "drop-after");
-}
-
-function onDrop(event) {
-  event.preventDefault();
-  const li = event.currentTarget;
-  li.classList.remove("drop-before", "drop-after");
-  const targetId = Number(li.dataset.id);
-  if (draggingId === null || draggingId === targetId) {
+function onHandleMove(event) {
+  if (!dragState) {
     return;
   }
-  const rect = li.getBoundingClientRect();
-  const before = event.clientY < rect.top + rect.height / 2;
-  moveTask(draggingId, targetId, before);
+  const dy = event.clientY - dragState.startY;
+  if (!dragState.moved && Math.abs(dy) < 6) {
+    return;   // wait until the pointer actually travels a little
+  }
+  if (!dragState.moved) {
+    dragState.moved = true;
+    dragState.li.classList.add("dragging");
+    document.body.classList.add("dragging-task");
+    indicator.style.display = "block";
+  }
+  dropIndex = getDropIndex(event.clientY);
+  positionIndicator(dropIndex);
 }
 
-// Move one task next to another in the array -----------------
-function moveTask(draggedId, targetId, before) {
-  const from = tasks.findIndex((t) => t.id === draggedId);
+function onHandleUp() {
+  if (!dragState) {
+    return;
+  }
+  if (dragState.moved) {
+    applyDrop(dragState.taskId, dropIndex);
+  }
+  endDrag();
+}
+
+function endDrag() {
+  if (dragState && dragState.li) {
+    dragState.li.classList.remove("dragging");
+  }
+  document.body.classList.remove("dragging-task");
+  indicator.style.display = "none";
+  dragState = null;
+  dropIndex = -1;
+}
+
+// Which slot (0..n) does the pointer sit over? Dragged item excluded.
+function getDropIndex(clientY) {
+  const reduced = Array.from(list.querySelectorAll("li")).filter(
+    (li) => li !== dragState.li
+  );
+  for (let i = 0; i < reduced.length; i++) {
+    const rect = reduced[i].getBoundingClientRect();
+    if (clientY < rect.top + rect.height / 2) {
+      return i;
+    }
+  }
+  return reduced.length;
+}
+
+// Slide the blue line to the boundary at the given slot.
+function positionIndicator(index) {
+  const reduced = Array.from(list.querySelectorAll("li")).filter(
+    (li) => li !== dragState.li
+  );
+  const listRect = list.getBoundingClientRect();
+  let top;
+  if (reduced.length === 0) {
+    top = 0;
+  } else if (index <= 0) {
+    top = reduced[0].getBoundingClientRect().top - listRect.top;
+  } else if (index >= reduced.length) {
+    top = reduced[reduced.length - 1].getBoundingClientRect().bottom - listRect.top;
+  } else {
+    top = reduced[index].getBoundingClientRect().top - listRect.top;
+  }
+  indicator.style.top = top + "px";
+}
+
+// Commit the new position into the array and persist it.
+function applyDrop(taskId, index) {
+  const from = tasks.findIndex((t) => t.id === taskId);
   if (from < 0) {
     return;
   }
   const [moved] = tasks.splice(from, 1);
-  let insertAt = tasks.findIndex((t) => t.id === targetId);
-  if (!before) {
-    insertAt++;
+
+  if (autoSort) {
+    const active = tasks.filter((t) => !t.done);
+    const done = tasks.filter((t) => t.done);
+    const insertAt = Math.min(Math.max(index, 0), active.length);
+    active.splice(insertAt, 0, moved);
+    tasks = active.concat(done);
+  } else {
+    tasks.splice(Math.min(Math.max(index, 0), tasks.length), 0, moved);
   }
-  tasks.splice(Math.min(insertAt, tasks.length), 0, moved);
+
   saveTasks();
   render();
 }
@@ -83,6 +136,10 @@ function render() {
   for (let task of displayTasks()) {
     const li = document.createElement("li");   // make a <li>
     li.dataset.id = task.id;
+
+    const handle = document.createElement("span");
+    handle.className = "drag-handle";
+    handle.textContent = "⠿";
 
     const checkbox = document.createElement("input");
     checkbox.type = "checkbox";
@@ -109,23 +166,28 @@ function render() {
       li.classList.add("done");
     }
 
+    // pinned (completed while sorting) items can't be dragged
+    const canDrag = !(autoSort && task.done);
+    if (canDrag) {
+      handle.addEventListener("pointerdown", function (event) {
+        onHandleDown(event, task.id, li);
+      });
+      handle.addEventListener("pointermove", onHandleMove);
+      handle.addEventListener("pointerup", onHandleUp);
+      handle.addEventListener("pointercancel", endDrag);
+    } else {
+      handle.classList.add("pinned");
+    }
+
+    li.appendChild(handle);
     li.appendChild(checkbox);
     li.appendChild(span);
     li.appendChild(deleteBtn);
 
-    // pinned (completed while sorting) items can't be dragged
-    if (!(autoSort && task.done)) {
-      li.draggable = true;
-      li.addEventListener("dragstart", onDragStart);
-      li.addEventListener("dragend", onDragEnd);
-      li.addEventListener("dragover", onDragOver);
-      li.addEventListener("dragleave", onDragLeave);
-      li.addEventListener("drop", onDrop);
-    }
-
     list.appendChild(li);
   }
 
+  list.appendChild(indicator);
   updateCounter();
 }
 

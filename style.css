@@ -81,6 +81,7 @@ h1 {
 
 #task-list {
   list-style: none;
+  position: relative;
 }
 
 #task-list li {
@@ -91,20 +92,37 @@ h1 {
   border-bottom: 1px solid #eee;
 }
 
-#task-list li[draggable="true"] {
+#task-list li .drag-handle {
   cursor: grab;
+  color: #bbb;
+  font-size: 1rem;
+  line-height: 1;
+  padding: 0 2px;
+  touch-action: none;
+  user-select: none;
+}
+
+#task-list li .drag-handle.pinned {
+  cursor: default;
+  color: #e5e5e5;
 }
 
 #task-list li.dragging {
-  opacity: 0.5;
+  opacity: 0.4;
 }
 
-#task-list li.drop-before {
-  box-shadow: 0 -2px 0 0 #4a90e2;
+body.dragging-task {
+  user-select: none;
 }
 
-#task-list li.drop-after {
-  box-shadow: 0 2px 0 0 #4a90e2;
+#drop-indicator {
+  display: none;
+  position: absolute;
+  left: 0;
+  right: 0;
+  height: 2px;
+  background: #4a90e2;
+  pointer-events: none;
 }
 
 #task-list li span {
