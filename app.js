@@ -46,8 +46,12 @@ function onHandleMove(event) {
     document.body.classList.add("dragging-task");
   }
 
-  // the grabbed row follows the pointer vertically
-  dragState.li.style.transform = "translateY(" + dy + "px)";
+  // the grabbed row follows the pointer, but never leaves the list
+  const listRect = list.getBoundingClientRect();
+  const maxDy = listRect.height - dragState.li.offsetTop - dragState.li.offsetHeight;
+  const minDy = -dragState.li.offsetTop;
+  const clamped = Math.min(Math.max(dy, minDy), maxDy);
+  dragState.li.style.transform = "translateY(" + clamped + "px)";
 
   // slide it past its neighbours while moving
   shuffleIntoPlace();
