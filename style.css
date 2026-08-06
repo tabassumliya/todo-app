@@ -63,6 +63,22 @@ h1 {
   background: #3a7bc8;
 }
 
+.controls {
+  display: flex;
+  justify-content: center;
+  margin-bottom: 12px;
+}
+
+.controls label {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 0.9rem;
+  color: #666;
+  cursor: pointer;
+  user-select: none;
+}
+
 #task-list {
   list-style: none;
 }
@@ -73,6 +89,22 @@ h1 {
   gap: 10px;
   padding: 8px 0;
   border-bottom: 1px solid #eee;
+}
+
+#task-list li[draggable="true"] {
+  cursor: grab;
+}
+
+#task-list li.dragging {
+  opacity: 0.5;
+}
+
+#task-list li.drop-before {
+  box-shadow: 0 -2px 0 0 #4a90e2;
+}
+
+#task-list li.drop-after {
+  box-shadow: 0 2px 0 0 #4a90e2;
 }
 
 #task-list li span {
