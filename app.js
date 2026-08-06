@@ -18,15 +18,17 @@ function displayTasks() {
   return tasks.filter((t) => !t.done).concat(tasks.filter((t) => t.done));
 }
 
-// ---- Drag & drop (pointer events, live reorder) -------------
-let dragState = null;   // { taskId, li, startY, moved }
+// ---- Drag & drop (floating ghost + live reorder) -------------
+let dragState = null;   // { taskId, li, ghost, startY, startTop, moved }
 
 function onHandleDown(event, taskId, li) {
   event.preventDefault();
   dragState = {
     taskId: taskId,
     li: li,
+    ghost: null,
     startY: event.clientY,
+    startTop: li.getBoundingClientRect().top,
     moved: false,
   };
   event.currentTarget.setPointerCapture(event.pointerId);
@@ -44,17 +46,29 @@ function onHandleMove(event) {
     dragState.moved = true;
     dragState.li.classList.add("dragging");
     document.body.classList.add("dragging-task");
+    dragState.ghost = makeGhost();
   }
 
-  // the grabbed row follows the pointer, but never leaves the list
+  // keep the floating ghost inside the list, following the pointer
   const listRect = list.getBoundingClientRect();
-  const maxDy = listRect.height - dragState.li.offsetTop - dragState.li.offsetHeight;
-  const minDy = -dragState.li.offsetTop;
-  const clamped = Math.min(Math.max(dy, minDy), maxDy);
-  dragState.li.style.transform = "translateY(" + clamped + "px)";
+  const maxTop = listRect.top + listRect.height - dragState.ghost.offsetHeight;
+  const top = Math.min(Math.max(dragState.startTop + dy, listRect.top), maxTop);
+  dragState.ghost.style.transform = "translateY(" + (top - dragState.startTop) + "px)";
 
-  // slide it past its neighbours while moving
   shuffleIntoPlace();
+}
+
+// A floating clone that follows the pointer while dragging.
+function makeGhost() {
+  const g = dragState.li.cloneNode(true);
+  g.classList.remove("dragging");
+  g.classList.add("ghost");
+  const rect = dragState.li.getBoundingClientRect();
+  g.style.width = rect.width + "px";
+  g.style.left = rect.left + "px";
+  g.style.top = rect.top + "px";
+  document.body.appendChild(g);
+  return g;
 }
 
 function onHandleUp() {
@@ -62,7 +76,9 @@ function onHandleUp() {
     return;
   }
   if (dragState.moved) {
-    dragState.li.style.transform = "";
+    if (dragState.ghost) {
+      dragState.ghost.remove();
+    }
     dragState.li.classList.remove("dragging");
     document.body.classList.remove("dragging-task");
     saveTasks();
@@ -76,13 +92,15 @@ function cancelDrag() {
   if (!dragState) {
     return;
   }
-  dragState.li.style.transform = "";
+  if (dragState.ghost) {
+    dragState.ghost.remove();
+  }
   dragState.li.classList.remove("dragging");
   document.body.classList.remove("dragging-task");
   dragState = null;
 }
 
-// Move the grabbed row so it sits around the row the pointer is over.
+// Move the held placeholder row so the visible rows reflow around it.
 function shuffleIntoPlace() {
   const li = dragState.li;
   const others = Array.from(list.querySelectorAll("li")).filter(
@@ -97,8 +115,8 @@ function shuffleIntoPlace() {
     candidates = others.filter((row) => !row.classList.contains("done"));
   }
 
-  const rect = li.getBoundingClientRect();
-  const mid = rect.top + rect.height / 2;
+  const gRect = dragState.ghost.getBoundingClientRect();
+  const mid = gRect.top + gRect.height / 2;
 
   for (const row of candidates) {
     const r = row.getBoundingClientRect();
@@ -150,7 +168,9 @@ function render() {
     span.textContent = task.title;
 
     const deleteBtn = document.createElement("button");
-    deleteBtn.textContent = "Delete";
+    deleteBtn.className = "delete";
+    deleteBtn.textContent = "✕";
+    deleteBtn.setAttribute("aria-label", "Delete task");
 
     // tick a checkbox -> flip that task's done value
     checkbox.addEventListener("change", function () {
@@ -180,10 +200,10 @@ function render() {
       handle.classList.add("pinned");
     }
 
-    li.appendChild(handle);
     li.appendChild(checkbox);
     li.appendChild(span);
     li.appendChild(deleteBtn);
+    li.appendChild(handle);
 
     list.appendChild(li);
   }
