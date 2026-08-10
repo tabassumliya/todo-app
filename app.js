@@ -72,6 +72,11 @@ function makeGhost() {
 }
 
 function onHandleUp() {
+  finalizeDrag();
+}
+
+// Finish the drag: remove the ghost, restore the row, save the order.
+function finalizeDrag() {
   if (!dragState) {
     return;
   }
@@ -82,6 +87,7 @@ function onHandleUp() {
     dragState.li.classList.remove("dragging");
     document.body.classList.remove("dragging-task");
     saveTasks();
+    render();   // snap the row into its final slot
   } else {
     cancelDrag();
   }
@@ -299,6 +305,14 @@ sortToggle.addEventListener("change", function () {
   autoSort = sortToggle.checked;
   saveSort();
   render();
+});
+
+// Safety net: if the browser lost pointer-capture mid-drag, make sure the
+// drag is still finished when the pointer is released anywhere.
+document.addEventListener("pointerup", function () {
+  if (dragState) {
+    finalizeDrag();
+  }
 });
 
 sortToggle.checked = autoSort;
